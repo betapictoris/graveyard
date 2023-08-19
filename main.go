@@ -80,9 +80,14 @@ func main() {
  * Takes the passphrase.
  */
 func createKey(passphrase string) (key string) {
+  log.Debug("Creating SHA256 checksum from passphrase...")
+  // Create a checksum from the passphrase (needs to be turned into bytes)
   hash := sha256.Sum256([]byte(passphrase))
-  key = string(hash[:32]) // Create a 32-bit key
-
+  
+  // Convert the first 32 bytes into a string (this will be the key).
+  key = string(hash[:32])
+  
+  log.Debug("Done!")
   return string(key)
 }
 
