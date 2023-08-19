@@ -41,7 +41,7 @@ func makeArchive(dir string) error {
 	defer tw.Close()
 
   for _, e := range entries {
-    filename := e.Name()
+    filename := dir + "/" + e.Name()
 
    	// Open the file
     file, err := os.Open(filename)
