@@ -13,6 +13,7 @@ import (
   "io/ioutil"
   "io"
   "os"
+  "path"
   
   "strings"
 
@@ -49,8 +50,106 @@ func main() {
   err = decryptFile("files.tar.gz.buried", key)
   if err != nil {
     log.Fatal("Failed to decrypt archive.", "err", err)
+  } 
+
+  err = os.RemoveAll("files.tar.gz.buried")
+  if err != nil {
+    log.Fatal("Failed to remove file.", "err", err)
   }
 
+  err = os.RemoveAll("files")
+  if err != nil {
+    log.Fatal("Failed to remove directory.", "err", err)
+  }
+
+  err = extractArchive("files.tar.gz")
+  if err != nil {
+    log.Fatal("Failed to extract archive.", "err", err)
+  }
+
+  err = os.Remove("files.tar.gz")
+  if err != nil {
+    log.Fatal("Failed to remove file.", "err", err)
+  }
+}
+
+/*
+ * extractAcrhive
+ * Decompresses and unarchive a .tar.gz
+ * 
+ * Takes the file's path the unarchive.
+ */
+func extractArchive(file string) error {
+  // First open the file to obtain a reader
+  log.Debug("Opening file...", "file", file)
+  reader, err := os.Open(file)
+  
+  // Open a gunzip (gz) reader
+  log.Debug("Opening gz reader...")
+  gr, err := gzip.NewReader(reader)
+  if err != nil {
+    return err
+  }
+
+  // And now a tar reader
+  log.Debug("Opening tar reader...")
+  tr := tar.NewReader(gr)
+
+  // Start an infinite loop on the file
+  for true {
+    // Grab the header 
+    log.Debug("Reading content's header info...")
+    header, err := tr.Next()
+    
+
+    if err == io.EOF {
+      // If we have reached the end of the file (EOF) then we can safely break
+      // the loop.
+      log.Debug("EOF, Done!")
+      break
+    } else if err != nil {
+      // Otherwise, if the error is not nil, return the error.
+      return err
+    }
+
+    // New we'll create a switch statement to handle the different types of archive
+    // contents.
+    switch header.Typeflag {
+      case tar.TypeDir:
+        log.Debug("Creating directory...", "name", header.Name)
+        // If the header is a directory recreate it.
+        if err := os.Mkdir(header.Name, 0755); err != nil {
+          return err
+        }
+      case tar.TypeReg:
+        log.Debug("Creating directories, to ensure they exists...", "path", path.Dir(header.Name))
+        // Create directory path to ensure it exists... 
+        os.MkdirAll(path.Dir(header.Name), 0700)
+        
+        log.Debug("Creating file...", "name", header.Name)
+        // If it's a file, create a file with the same name.
+        file, err := os.Create(header.Name)
+        defer file.Close() // Close the file when we're done.
+        if err != nil {
+          return err
+        }
+        
+        log.Debug("Copying file...", "namelemmy.blahaj.zone", header.Name)
+        // Copy over the file.
+        if _, err := io.Copy(file, tr); err != nil {
+          return err
+        }
+      default:
+        // If it's not a directory or a file then we're in a strange place where
+        // we don't know what to do. 
+        // We could handle this in two ways, returning an error or warning the
+        // user, in this case we'll warn the user (as the other files may still
+        // be known types).
+        log.Warn("File is of unknown type.", "type", header.Typeflag)
+  }}
+
+  log.Info("The body has been removed from the casket", "stored at", strings.ReplaceAll(file, ".tar.gz", ""))
+  return nil
 }
 
 /*
@@ -224,4 +323,4 @@ func makeArchive(dir string) error {
   return nil
 }
 
-
+ 
