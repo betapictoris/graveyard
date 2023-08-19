@@ -148,7 +148,7 @@ func extractArchive(file string) error {
         log.Warn("File is of unknown type.", "type", header.Typeflag)
   }}
 
-  log.Info("The body has been removed from the casket", "stored at", strings.ReplaceAll(file, ".tar.gz", ""))
+  log.Info("The body has been removed from the casket!", "stored at", strings.ReplaceAll(file, ".tar.gz", ""))
   return nil
 }
 
