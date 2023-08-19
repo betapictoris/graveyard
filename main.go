@@ -28,6 +28,7 @@ import (
 )
 
 func main() {
+  // TODO: Add actual key support
   key := "BT4BGmmr3ZCKeTw8"
 
   err := makeArchive("files")
@@ -60,27 +61,32 @@ func main() {
  */
 func decryptFile(file, key string) error {
   // Read the file and get the contents
+  log.Debug("Reading file for decryption...")
   value, err := ioutil.ReadFile(file)
   if err != nil {
     return err
   }
 
   // Recreate the block cipher
+  log.Debug("Recreating block cipher...")
   block, err := aes.NewCipher([]byte(key))
   if err != nil {
     return err
   }
 
   // Reset up the GCM
+  log.Debug("Using GCM mode...")
   gcm, err := cipher.NewGCM(block)
   if err != nil {
     return err
   }
   
   // Now we'll need to get the nonce we created
+  log.Debug("Finding nonce...")
   nonce := value[:gcm.NonceSize()]
 
   // After we have the nonce we can get the actual value and open the file
+  log.Debug("Getting unencrypted value...")
   value = value[gcm.NonceSize():]
   plainValue, err := gcm.Open(nil, nonce, value, nil)
   if err != nil {
@@ -88,7 +94,10 @@ func decryptFile(file, key string) error {
   }
 
   // Finally, write out the file
+  log.Debug("Writing file...")
   err = ioutil.WriteFile(strings.ReplaceAll(file, ".buried", ""), plainValue, 0777)
+
+  log.Info("The casket has been exhumed!", "exhumed at", strings.ReplaceAll(file, ".buried", ""))
   return err
 }
 
@@ -100,6 +109,7 @@ func decryptFile(file, key string) error {
  */
 func encryptFile(file, key string) error {
   // Read the file and get contents
+  log.Debug("Reading file for encryption...", "file", file)
   value, err := ioutil.ReadFile(file)
   if err != nil {
     return err
@@ -107,7 +117,7 @@ func encryptFile(file, key string) error {
   
   // Create a block cipher
   // SEE: https://en.wikipedia.org/wiki/Block_cipher
-  // TODO: Add actual key support
+  log.Debug("Creating cipher from key...")
   block, err := aes.NewCipher([]byte(key))
   if err != nil {
     return err
@@ -115,25 +125,31 @@ func encryptFile(file, key string) error {
   
   // And now use GCM (Galois/Counter Mode)
   // SEE: https://en.wikipedia.org/wiki/Galois/Counter_Mode
+  log.Debug("Using GCM mode...")
   gcm, err := cipher.NewGCM(block)
   if err != nil {
     return err
   }
   
   // Generate a random number (nonce)
+  log.Debug("Generating nonce...")
   nonce := make([]byte, gcm.NonceSize())
   if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
     return err
   }
   
   // Use the seal function (which encrypts and authenticates plaintext).
+  log.Debug("Encrypting file...")
   cipherText := gcm.Seal(nonce, nonce, value, nil)
   
   // Write the file out
+  log.Debug("Writing file...")
   err = ioutil.WriteFile(file + ".buried", cipherText, 0777)
   if err != nil {
 	  return err
   }
+
+  log.Info("The file has been buried!", "buried at", file + ".buried")
 
   return nil
 }
@@ -147,17 +163,20 @@ func encryptFile(file, key string) error {
  */
 func makeArchive(dir string) error {
   // Find all the files that need to be added to the archive.
+  log.Debug("Reading files...")
   entries, err := os.ReadDir(dir)
   if err != nil {
     return err
   }
   
   // Create a file that ends in `.tar.gz`
+  log.Debug("Creating files...", "file", dir + ".tar.gz")
   buf, err := os.Create(dir + ".tar.gz")
   if err != nil {
     return err
   }
-
+  
+  log.Debug("Opening the new file...")
   gw := gzip.NewWriter(buf)
 	defer gw.Close()
 	tw := tar.NewWriter(gw)
@@ -165,6 +184,7 @@ func makeArchive(dir string) error {
 
   for _, e := range entries {
     filename := dir + "/" + e.Name()
+    log.Debug("Adding file...", "file", filename)
 
    	// Open the file
     file, err := os.Open(filename)
@@ -199,7 +219,8 @@ func makeArchive(dir string) error {
 		  return err
   	}
 	}
-
+  
+  log.Info("The body is in the casket!", "casket", dir + ".tar.gz")
   return nil
 }
 
