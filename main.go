@@ -13,6 +13,8 @@ import (
   "io/ioutil"
   "io"
   "os"
+  
+  "strings"
 
   "archive/tar"
   "compress/gzip"
@@ -26,12 +28,14 @@ import (
 )
 
 func main() {
+  key := "BT4BGmmr3ZCKeTw8"
+
   err := makeArchive("files")
   if err != nil {
     log.Fatal("Failed to create archive.", "err", err)
   }
 
-  err = encryptFile("files.tar.gz")
+  err = encryptFile("files.tar.gz", key)
   if err != nil {
     log.Fatal("Failed to encrypt files.", "err", err)
   }
@@ -40,7 +44,52 @@ func main() {
   if err != nil {
     log.Fatal("Failed to delete archive.", "err", err)
   }
+  
+  err = decryptFile("files.tar.gz.buried", key)
+  if err != nil {
+    log.Fatal("Failed to decrypt archive.", "err", err)
+  }
 
+}
+
+/*
+ * decryptFile
+ * Decrypts a file
+ *
+ * Takes the file to decrypt
+ */
+func decryptFile(file, key string) error {
+  // Read the file and get the contents
+  value, err := ioutil.ReadFile(file)
+  if err != nil {
+    return err
+  }
+
+  // Recreate the block cipher
+  block, err := aes.NewCipher([]byte(key))
+  if err != nil {
+    return err
+  }
+
+  // Reset up the GCM
+  gcm, err := cipher.NewGCM(block)
+  if err != nil {
+    return err
+  }
+  
+  // Now we'll need to get the nonce we created
+  nonce := value[:gcm.NonceSize()]
+
+  // After we have the nonce we can get the actual value and open the file
+  value = value[gcm.NonceSize():]
+  plainValue, err := gcm.Open(nil, nonce, value, nil)
+  if err != nil {
+    return err
+  }
+
+  // Finally, write out the file
+  err = ioutil.WriteFile(strings.ReplaceAll(file, ".buried", ""), plainValue, 0777)
+  return err
 }
 
 /*
@@ -49,7 +98,7 @@ func main() {
  *
  * Takes the file to encrypt
  */
-func encryptFile(file string) error {
+func encryptFile(file, key string) error {
   // Read the file and get contents
   value, err := ioutil.ReadFile(file)
   if err != nil {
@@ -59,7 +108,7 @@ func encryptFile(file string) error {
   // Create a block cipher
   // SEE: https://en.wikipedia.org/wiki/Block_cipher
   // TODO: Add actual key support
-  block, err := aes.NewCipher([]byte("UTFt3YBbdTFnf5wA"))
+  block, err := aes.NewCipher([]byte(key))
   if err != nil {
     return err
   }
@@ -81,7 +130,7 @@ func encryptFile(file string) error {
   cipherText := gcm.Seal(nonce, nonce, value, nil)
   
   // Write the file out
-  err = ioutil.WriteFile(file + ".grave", cipherText, 0777)
+  err = ioutil.WriteFile(file + ".buried", cipherText, 0777)
   if err != nil {
 	  return err
   }
