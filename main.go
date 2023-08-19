@@ -40,7 +40,7 @@ func makeArchive(dir string) error {
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-  for _, file := range entries {
+  for _, e := range entries {
     filename := e.Name()
 
    	// Open the file
