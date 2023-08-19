@@ -23,14 +23,13 @@ import (
   "crypto/aes"
   "crypto/rand"
   "crypto/cipher"
+  "crypto/sha256"
   
-  //tea "github.com/charmbracelet/bubbletea"
   "github.com/charmbracelet/log"
 )
 
 func main() {
-  // TODO: Add actual key support
-  key := "BT4BGmmr3ZCKeTw8"
+  key := createKey("pass")
 
   err := makeArchive("files")
   if err != nil {
@@ -71,6 +70,20 @@ func main() {
   if err != nil {
     log.Fatal("Failed to remove file.", "err", err)
   }
+}
+
+
+/*
+ * createKey
+ * Generates a key to use for encryption
+ * 
+ * Takes the passphrase.
+ */
+func createKey(passphrase string) (key string) {
+  hash := sha256.Sum256([]byte(passphrase))
+  key = string(hash[:32]) // Create a 32-bit key
+
+  return string(key)
 }
 
 /*
