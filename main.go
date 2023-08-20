@@ -41,6 +41,7 @@ var (
 func main() {
   // TODO: Add an CLI option for this
   //log.SetLevel(log.DebugLevel)
+  log.SetLevel(log.WarnLevel)
   
   // Get information on where to store data
  
@@ -171,6 +172,8 @@ func main() {
           log.Debug("Cleaning...")
           os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz")
 
+          fmt.Println(app_path + "/morgue/" + cCtx.Args().First())
+
           return nil
         },
       },
@@ -186,9 +189,13 @@ func main() {
 		        log.Fatal("Failed to start Bubbletea...", "err", err)
 	        }
 
+          // Archive the directory
+          log.Debug("Archiving...")
+          err := makeArchive(app_path + "/morgue/" + cCtx.Args().First())
+
           // Encrypt the grave using that key
           log.Debug("Encrypting...")
-          err :=  encryptFile(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz", key)
+          err = encryptFile(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz", key)
 
           // Move the encrypted archive into the graves directory
           log.Debug("Moving into the graveyard...")
@@ -200,6 +207,44 @@ func main() {
           // Clean up
           log.Debug("Cleaning...")
           os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First())
+          os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz")
+
+          return nil
+        },
+      },
+      {
+        Name:       "ls",
+        Aliases:    []string{"list"},
+        Usage:      "List all graves",
+        Action: func (cCtx *cli.Context) error {
+          // Find all graves
+          log.Debug("Searching for graves...")
+          entries, _ := os.ReadDir(app_path + "/graves/")
+
+          // Now print each
+          for _, e := range entries {
+            // We are using the logger here so it looks cleaner, and we don't
+            // have to worry about the logging level. 
+            fmt.Println(strings.ReplaceAll(e.Name(), ".tar.gz.buried", "")) 
+          }
+          
+          return nil
+        },
+      },
+      {
+        Name:     "ps",
+        Aliases:  []string{"obituary"},
+        Usage:    "List all open graves",
+        Action: func (cCtx *cli.Context) error {
+          // Find all open graves
+          log.Debug("Searching for open graves...")
+          entries, _ := os.ReadDir(app_path + "/morgue/")
+
+          // Now print each
+          for _, e := range entries {
+            // See "ls"/"list" on why we're using fmt
+            fmt.Println(e.Name())
+          }
 
           return nil
         },
