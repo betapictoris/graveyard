@@ -39,7 +39,9 @@ var (
 )
 
 func main() {
-  log.SetLevel(log.DebugLevel)
+  // TODO: Add an CLI option for this
+  //log.SetLevel(log.DebugLevel)
+  
   // Get information on where to store data
  
   // I did a Mastodon poll for this (https://mas.to/@beta/110918744607295502).
@@ -550,6 +552,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
     case tea.KeyEnter:
       key = createKey(m.textInput.Value())
+      return m, tea.Quit
 		case tea.KeyCtrlC, tea.KeyEsc:
       os.Exit(0)
 		}
