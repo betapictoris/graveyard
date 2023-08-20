@@ -36,7 +36,7 @@ source code and figure out what everything is doing.
 
 ## How do I install Graveyard?
 
-## From GitHub Releases
+### From GitHub Releases
 
 Download the binary using `curl`, and then install it using `install`:
 
@@ -52,7 +52,7 @@ user account:
 install -Dt ~/.local/bin -m 755 grave
 ```
 
-## From Source
+### From Source
 
 You'll need a recent version of Go(lang), I tested and developed using 1.21.
 To install Go on Arch Linux:
