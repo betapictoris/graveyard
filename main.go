@@ -13,6 +13,7 @@ import (
   "io/ioutil"
   "io"
   "os"
+  "fmt"
   "path"
   
   "strings"
@@ -27,9 +28,15 @@ import (
 
   "github.com/urfave/cli/v2"
   "github.com/charmbracelet/log"
+
+  "github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-var app_path string
+var (
+  app_path  string
+  key       string
+)
 
 func main() {
   log.SetLevel(log.DebugLevel)
@@ -68,7 +75,7 @@ func main() {
   // Create a CLI application and define commands
   app := &cli.App{
     Name:  "grave",
-    Usage: "dead simple encryption",
+    Usage: "Dead simple encryption",
 
     Authors: []*cli.Author{
 			&cli.Author{
@@ -85,7 +92,10 @@ func main() {
         ArgsUsage: "<name>",
         Action: func(cCtx *cli.Context) error {
           // Create a key from the passphrase...
-          key := createKey("somepassphrase") // TODO: Add input for this
+          p := tea.NewProgram(initialModel())
+    	    if _, err := p.Run(); err != nil {
+		        log.Fatal("Failed to start Bubbletea...", "err", err)
+	        }
           
           // Create a directory (this is what we'll be making the archive from)
           log.Debug("Creating directory and placeholder file...")
@@ -131,9 +141,12 @@ func main() {
         Usage:     "Open a buried grave",
         ArgsUsage: "<name>",
         Action: func(cCtx *cli.Context) error {
-          // Get a key from the passphrase
-          key := createKey("somepassphrase") // TODO: Add input for this
-          
+          // Create a key from the passphrase...
+          p := tea.NewProgram(initialModel())
+    	    if _, err := p.Run(); err != nil {
+		        log.Fatal("Failed to start Bubbletea...", "err", err)
+	        }
+
           // Decrypt the grave using that key
           log.Debug("Decrypting...")
           err := decryptFile(app_path + "/graves/" + cCtx.Args().First() + ".tar.gz.buried", key)
@@ -165,8 +178,11 @@ func main() {
         Usage:     "Bury an open grave",
         ArgsUsage: "<name>",
         Action: func (cCtx *cli.Context) error {
-          // Get a kery from the passphrase
-          key := createKey("somepassphrase") // TODO: Add input for this
+          // Create a key from the passphrase...
+          p := tea.NewProgram(initialModel())
+    	    if _, err := p.Run(); err != nil {
+		        log.Fatal("Failed to start Bubbletea...", "err", err)
+	        }
 
           // Encrypt the grave using that key
           log.Debug("Encrypting...")
@@ -499,4 +515,59 @@ func fileExists(filename string) bool {
       return false
    }
    return !info.IsDir()
+}
+
+
+type model struct {
+	textInput textinput.Model
+	err       error
+}
+
+func initialModel() model {
+	ti := textinput.New()
+	//ti.Placeholder   = "Passphrase"
+  ti.EchoMode      = textinput.EchoPassword
+  ti.EchoCharacter = '•'
+	ti.Focus()
+	ti.CharLimit = 156
+	ti.Width = 20
+
+	return model{
+		textInput: ti,
+		err:       nil,
+	}
+}
+
+func (m model) Init() tea.Cmd {
+	return textinput.Blink
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+    case tea.KeyEnter:
+      key = createKey(m.textInput.Value())
+		case tea.KeyCtrlC, tea.KeyEsc:
+      os.Exit(0)
+		}
+
+	// We handle errors just like any other message
+	case error:
+		m.err = msg
+		return m, nil
+	}
+
+	m.textInput, cmd = m.textInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) View() string {
+	return fmt.Sprintf(
+    "Passphrase:\n\n%s\n\n%s",
+		m.textInput.View(),
+		"(esc to quit)",
+	) + "\n"
 }
