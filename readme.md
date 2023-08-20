@@ -15,7 +15,7 @@ personal gripes with it, including:
  - Being written in a scripting language it felt slow. 
  - It requires `sudo` to be installed, supposedly there was `doas` support —
    but it didn't seem to work for me.
- - It didn't track files, this means that it could get messy (or sacrifice
+ - It doesn't track files, this means that it could get messy (or sacrifice
    convenience) at scale.
 
 If you feel the same way about any of these issues give Graveyard a try, but if
