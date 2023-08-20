@@ -24,51 +24,173 @@ import (
   "crypto/rand"
   "crypto/cipher"
   "crypto/sha256"
-  
+
+  "github.com/urfave/cli/v2"
   "github.com/charmbracelet/log"
 )
 
+var app_path string
+
 func main() {
-  key := createKey("pass")
-
-  err := makeArchive("files")
-  if err != nil {
-    log.Fatal("Failed to create archive.", "err", err)
+  log.SetLevel(log.DebugLevel)
+  // Get information on where to store data
+ 
+  // I did a Mastodon poll for this (https://mas.to/@beta/110918744607295502).
+  // Use XDG_DATA_HOME/graveyard, if set.
+  data_home := os.Getenv("XDG_DATA_HOME")
+  if data_home == "" {
+    // Otherwise, use HOME/.graveyard
+    usrHome, err := os.UserHomeDir()
+    if err != nil {
+		  log.Fatal("Failed to get user home path.", "err", err)
+    }
+    
+    app_path = usrHome + "/.graveyard" 
+  } else {
+    app_path = data_home + "/graveyard"
   }
 
-  err = encryptFile("files.tar.gz", key)
-  if err != nil {
-    log.Fatal("Failed to encrypt files.", "err", err)
+  // Now make sure all dirs exist
+  os.MkdirAll(app_path + "/graves", 0700) // This is where encrypted files will be stored.
+  os.MkdirAll(app_path + "/morgue", 0700) // This is where the unencrypted files will be stored.
+
+  // Create a placeholder text file
+  if !fileExists(app_path + "/placeholder") {
+    value := []byte("Hello, and welcome to your grave!\nYou can store all kinda of photos in here and they'll be secured once you close it!")
+    err := os.WriteFile(app_path + "/placeholder", value, 0600)
+
+    if err != err {
+      log.Fatal("Failed to write to file", "err", err)
+    }
   }
 
-  err = os.Remove("files.tar.gz")
-  if err != nil {
-    log.Fatal("Failed to delete archive.", "err", err)
-  }
-  
-  err = decryptFile("files.tar.gz.buried", key)
-  if err != nil {
-    log.Fatal("Failed to decrypt archive.", "err", err)
-  } 
 
-  err = os.RemoveAll("files.tar.gz.buried")
-  if err != nil {
-    log.Fatal("Failed to remove file.", "err", err)
+  // Create a CLI application and define commands
+  app := &cli.App{
+    Name:  "grave",
+    Usage: "dead simple encryption",
+
+    Authors: []*cli.Author{
+			&cli.Author{
+				Name:  "Daniel Hall",
+				Email: "beta@hai.haus",
+			},
+		},
+
+    Commands: []*cli.Command{
+      {
+        Name:      "dig",
+        Aliases:   []string{"new"},
+        Usage:     "Create a new grave",
+        ArgsUsage: "<name>",
+        Action: func(cCtx *cli.Context) error {
+          // Create a key from the passphrase...
+          key := createKey("somepassphrase") // TODO: Add input for this
+          
+          // Create a directory (this is what we'll be making the archive from)
+          log.Debug("Creating directory and placeholder file...")
+          os.MkdirAll(app_path + "/morgue/" + cCtx.Args().First(), 0700)
+                    
+          err := copyFile(app_path + "/placeholder", app_path + "/morgue/" + cCtx.Args().First() + "/readme")
+          if err != nil {
+            log.Fatal("Failed to copy readme.", "err", err)
+          }
+          
+          // Create an archive from that directory.
+          log.Debug("Archiving...")
+          err = makeArchive(app_path + "/morgue/" + cCtx.Args().First())
+          if err != nil {
+            log.Fatal("Failed to archive.", "err", err)
+          }
+
+          // And encrypt it
+          log.Debug("Encrypting...")
+          encryptFile(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz", key)
+          if err != nil {
+            log.Fatal("Failed to encrypt archive.", "err", err)
+          }
+          
+          // Now move it into the graves
+          log.Debug("Moving to graveyard...")
+          err = os.Rename(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz.buried", app_path + "/graves/" + cCtx.Args().First() + ".tar.gz.buried")
+          if err != nil {
+            log.Fatal("Failed to move to graveyard", "err", err)
+          }
+
+          // Now clean up 
+          log.Debug("Cleaning...")
+          os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First())
+          os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz")
+
+          return nil
+        },
+      },
+      {
+        Name:      "exhume",
+        Aliases:   []string{"open"},
+        Usage:     "Open a buried grave",
+        ArgsUsage: "<name>",
+        Action: func(cCtx *cli.Context) error {
+          // Get a key from the passphrase
+          key := createKey("somepassphrase") // TODO: Add input for this
+          
+          // Decrypt the grave using that key
+          log.Debug("Decrypting...")
+          err := decryptFile(app_path + "/graves/" + cCtx.Args().First() + ".tar.gz.buried", key)
+          if err != nil {
+            log.Fatal("Failed to decrypt file.", "err", err)
+          }
+          
+          // Move the decrypted archive into where the directory will be stored
+          log.Debug("Moving to morgue...")
+          err = os.Rename(app_path + "/graves/" + cCtx.Args().First() + ".tar.gz", app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz")
+          if err != nil {
+            log.Fatal("Failed to move archive into morgue...", "err", err)
+          }
+          
+          // Extract the archive
+          log.Debug("Extracting...")
+          extractArchive(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz")
+          
+          // Clean up
+          log.Debug("Cleaning...")
+          os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz")
+
+          return nil
+        },
+      },
+      {
+        Name:      "bury",
+        Aliases:   []string{"close"},
+        Usage:     "Bury an open grave",
+        ArgsUsage: "<name>",
+        Action: func (cCtx *cli.Context) error {
+          // Get a kery from the passphrase
+          key := createKey("somepassphrase") // TODO: Add input for this
+
+          // Encrypt the grave using that key
+          log.Debug("Encrypting...")
+          err :=  encryptFile(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz", key)
+
+          // Move the encrypted archive into the graves directory
+          log.Debug("Moving into the graveyard...")
+          err = os.Rename(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz.buried", app_path + "/graves/" + cCtx.Args().First() + ".tar.gz.buried")
+          if err != nil {
+            log.Fatal("Failed to move archive into morgue...", "err", err)
+          }
+
+          // Clean up
+          log.Debug("Cleaning...")
+          os.RemoveAll(app_path + "/morgue/" + cCtx.Args().First())
+
+          return nil
+        },
+      },
+    },
   }
 
-  err = os.RemoveAll("files")
-  if err != nil {
-    log.Fatal("Failed to remove directory.", "err", err)
-  }
-
-  err = extractArchive("files.tar.gz")
-  if err != nil {
-    log.Fatal("Failed to extract archive.", "err", err)
-  }
-
-  err = os.Remove("files.tar.gz")
-  if err != nil {
-    log.Fatal("Failed to remove file.", "err", err)
+  if err := app.Run(os.Args); err != nil {
+    log.Fatal("Failed to start grave.", "err", err)
   }
 }
 
@@ -140,6 +262,7 @@ func extractArchive(file string) error {
           return err
         }
       case tar.TypeReg:
+        log.Debug("File info dump", "path dir", path.Dir(header.Name), "name", header.Name)
         log.Debug("Creating directories, to ensure they exists...", "path", path.Dir(header.Name))
         // Create directory path to ensure it exists... 
         os.MkdirAll(path.Dir(header.Name), 0700)
@@ -152,7 +275,7 @@ func extractArchive(file string) error {
           return err
         }
         
-        log.Debug("Copying file...", "namelemmy.blahaj.zone", header.Name)
+        log.Debug("Copying file...", "name", header.Name)
         // Copy over the file.
         if _, err := io.Copy(file, tr); err != nil {
           return err
@@ -164,7 +287,7 @@ func extractArchive(file string) error {
         // user, in this case we'll warn the user (as the other files may still
         // be known types).
         log.Warn("File is of unknown type.", "type", header.Typeflag)
-  }}
+  }}// 
 
   log.Info("The body has been removed from the casket!", "stored at", strings.ReplaceAll(file, ".tar.gz", ""))
   return nil
@@ -341,4 +464,39 @@ func makeArchive(dir string) error {
   return nil
 }
 
- 
+// copyFile copies the contents of the file named src to the file named
+// by dst. The file will be created if it does not already exist. If the
+// destination file exists, all it's contents will be replaced by the contents
+// of the source file.
+func copyFile(src, dst string) (err error) {
+    in, err := os.Open(src)
+    if err != nil {
+        return
+    }
+    defer in.Close()
+    out, err := os.Create(dst)
+    if err != nil {
+        return
+    }
+    defer func() {
+        cerr := out.Close()
+        if err == nil {
+            err = cerr
+        }
+    }()
+    if _, err = io.Copy(out, in); err != nil {
+        return
+    }
+    err = out.Sync()
+    return
+}
+
+
+// checks if filename exists
+func fileExists(filename string) bool {
+   info, err := os.Stat(filename)
+   if os.IsNotExist(err) {
+      return false
+   }
+   return !info.IsDir()
+}
