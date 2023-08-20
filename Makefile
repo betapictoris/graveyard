@@ -4,10 +4,10 @@ build:
 	mv ./grave ./build/grave
 
 usrinstall: build
-	cp ./build/grave ~/.bin/
+	install -Dt ~/.local/bin -m 755 ./build/grave
 
 install: build
-	sudo cp ./build/grave /bin/
+	sudo install -Dt /usr/local/bin -m 755 ./build/grave
 
 clean:
 	rm -rf ./build/
