@@ -142,7 +142,7 @@ func main() {
 
           // And encrypt it
           log.Debug("Encrypting...")
-          encryptFile(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz", key)
+          err = encryptFile(app_path + "/morgue/" + cCtx.Args().First() + ".tar.gz", key)
           if err != nil {
             log.Fatal("Failed to encrypt archive.", "err", err)
           }
@@ -293,7 +293,10 @@ func main() {
  * Returns a key and error.
  */
 func checkKey(grave, passphrase string) (string, error) {
-  // Get all keys from the keys file. 
+  log.Info("Checking key...")
+
+  // Get all keys from the keys file. :
+  log.Debug("Reading keys file...")
   keys, err := ioutil.ReadFile(app_path + "/keys")
   if err != nil {
     return "", err
@@ -301,6 +304,7 @@ func checkKey(grave, passphrase string) (string, error) {
 
   var encoded_hash string
   
+  log.Debug("Finding key...")
   // Loop through all keys -- this isn't perfect, but it works.
   for _, i := range strings.Split(string(keys), "\n") {
     e := strings.Split(i, " ")
@@ -313,12 +317,15 @@ func checkKey(grave, passphrase string) (string, error) {
     }
   }
   
+  // Try to parse the encoded hash... 
+  log.Debug("Getting values...")
   vals := strings.Split(encoded_hash, "$")
   if len(vals) != 6 {
     return "", errors.New("The hash is not in the correct format.")
   }
   
   var version int
+  log.Debug("Checking version...")
   _, err = fmt.Sscanf(vals[2], "v=%d", &version)
   if err != nil {
     return "", err
@@ -327,28 +334,33 @@ func checkKey(grave, passphrase string) (string, error) {
     return "", errors.New("The argon2 version is incompatible.")
   }
   
-  var memory uint32
-  var iterations uint32
-  var threads uint8
-  _, err = fmt.Sscanf(vals[3], "m=%d,t=%d,p=%d", memory, iterations, threads)
+  var memory int
+  var iterations int
+  var threads int
+  log.Debug("Finding memory, iterations, and threads...")
+  _, err = fmt.Sscanf(vals[3], "m=%d,t=%d,p=%d", &memory, &iterations, &threads)
   if err != nil {
     return "", err
   }
   
+  log.Debug("Finding salt...")
   salt, err := base64.RawStdEncoding.Strict().DecodeString(vals[4])
   if err != nil {
     return "", err
   }
   //saltLength := uint32(len(salt))
   
+  log.Debug("Finding hash...")
   hash, err := base64.RawStdEncoding.Strict().DecodeString(vals[5])
   if err != nil {
     return "", err
   }
   keyLength := uint32(len(hash))
-
-  newHash := argon2.IDKey([]byte(passphrase), salt, iterations, memory, threads, keyLength)
-
+  
+  log.Debug("Rehashing with the same parameters...")
+  newHash := argon2.IDKey([]byte(passphrase), salt, uint32(iterations), uint32(memory), uint8(threads), keyLength)
+  
+  log.Debug("Checking...")
   if subtle.ConstantTimeCompare(hash, newHash) == 1 {
     return string(newHash), nil
   }
@@ -404,7 +416,7 @@ func createKey(grave, passphrase string) (string, error) {
   }
 
   log.Debug("Done!")
-  return string(key), nil
+  return string(argon), nil
 }
 
 /*
@@ -740,6 +752,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
       if err != nil {
         log.Fatal("Failed to preform key action.", "is new key", grave_is_new, "err", err)
+      }
+      
+      if key == "" {
+        log.Fatal("Couldn't validate key.")
       }
 
       return m, tea.Quit
