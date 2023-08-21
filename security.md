@@ -10,5 +10,5 @@
 
 There are two methods of opening a vulnerability report, in order of preference: 
 
-1. Open an issue with the [Security](https://github.com/BetaPictoris/graveyard/issues/new?assignees=&labels=security&projects=&template=security.md&title=%5BSECURITY%5D) template.
+1. Open an issue with the [Security](https://github.com/BetaPictoris/graveyard/security/advisories/new) template.
 2. Email me (beta@hai.haus) with the subject `[SECURITY] Graveyard: <Title>`.
