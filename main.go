@@ -15,16 +15,21 @@ import (
   "os"
   "fmt"
   "path"
-  
+  "runtime"
+  "errors" 
   "strings"
 
   "archive/tar"
   "compress/gzip"
+
+  "encoding/base64"
   
   "crypto/aes"
   "crypto/rand"
   "crypto/cipher"
-  "crypto/sha256"
+  "crypto/subtle"
+  
+  "golang.org/x/crypto/argon2"
 
   "github.com/urfave/cli/v2"
   "github.com/charmbracelet/log"
@@ -34,8 +39,11 @@ import (
 )
 
 var (
-  app_path  string
-  key       string
+  app_path      string
+
+  key           string
+  current_grave string
+  grave_is_new  bool
 )
 
 func main() {
@@ -94,6 +102,9 @@ func main() {
         Usage:     "Create a new grave",
         ArgsUsage: "<name>",
         Action: func(cCtx *cli.Context) error {
+          current_grave = cCtx.Args().First() // TODO: Refactor other uses of this param.
+          grave_is_new  = true
+
           // Create a key from the passphrase...
           p := tea.NewProgram(initialModel())
     	    if _, err := p.Run(); err != nil {
@@ -144,6 +155,8 @@ func main() {
         Usage:     "Open a buried grave",
         ArgsUsage: "<name>",
         Action: func(cCtx *cli.Context) error {
+          current_grave = cCtx.Args().First() // TODO: Refactor other uses of this param.
+
           // Create a key from the passphrase...
           p := tea.NewProgram(initialModel())
     	    if _, err := p.Run(); err != nil {
@@ -183,6 +196,8 @@ func main() {
         Usage:     "Bury an open grave",
         ArgsUsage: "<name>",
         Action: func (cCtx *cli.Context) error {
+          current_grave = cCtx.Args().First() // TODO: Refactor other uses of this param.
+
           // Create a key from the passphrase...
           p := tea.NewProgram(initialModel())
     	    if _, err := p.Run(); err != nil {
@@ -257,23 +272,126 @@ func main() {
   }
 }
 
-
 /*
+ * checkKey
+ * Checks if a passphrase is correct.
+ *
+ * Takes a grave and passphrase.
+ * Returns a key and error.
+ */
+func checkKey(grave, passphrase string) (string, error) {
+  // Get all keys from the keys file. 
+  keys, err := ioutil.ReadFile(app_path + "/keys")
+  if err != nil {
+    return "", err
+  }
+
+  var encoded_hash string
+  
+  // Loop through all keys -- this isn't perfect, but it works.
+  for _, i := range strings.Split(string(keys), "\n") {
+    e := strings.Split(i, " ")
+
+    g := e[0] // The grave will be the first section of the line
+    h := e[1] // and the hash is on the second section
+
+    if g == grave {
+      encoded_hash = h
+    }
+  }
+  
+  vals := strings.Split(encoded_hash, "$")
+  if len(vals) != 6 {
+    return "", errors.New("The hash is not in the correct format.")
+  }
+  
+  var version int
+  _, err = fmt.Sscanf(vals[2], "v=%d", &version)
+  if err != nil {
+    return "", err
+  }
+  if version != argon2.Version {
+    return "", errors.New("The argon2 version is incompatible.")
+  }
+  
+  var memory uint32
+  var iterations uint32
+  var threads uint8
+  _, err = fmt.Sscanf(vals[3], "m=%d,t=%d,p=%d", memory, iterations, threads)
+  if err != nil {
+    return "", err
+  }
+  
+  salt, err := base64.RawStdEncoding.Strict().DecodeString(vals[4])
+  if err != nil {
+    return "", err
+  }
+  //saltLength := uint32(len(salt))
+  
+  hash, err := base64.RawStdEncoding.Strict().DecodeString(vals[5])
+  if err != nil {
+    return "", err
+  }
+  keyLength := uint32(len(hash))
+
+  newHash := argon2.IDKey([]byte(passphrase), salt, iterations, memory, threads, keyLength)
+
+  if subtle.ConstantTimeCompare(hash, newHash) == 1 {
+    return string(newHash), nil
+  }
+  return "", errors.New("Authentication denied")
+}
+
+/* 
  * createKey
  * Generates a key to use for encryption
  * 
- * Takes the passphrase.
+ * Takes the grave and passphrase.
+ * Returns a key and error.
  */
-func createKey(passphrase string) (key string) {
-  log.Debug("Creating SHA256 checksum from passphrase...")
-  // Create a checksum from the passphrase (needs to be turned into bytes)
-  hash := sha256.Sum256([]byte(passphrase))
+func createKey(grave, passphrase string) (string, error) {
+  log.Debug("Creating key from passphrase...")
+  // Now we will build an Argon2 hash on top of this
   
-  // Convert the first 32 bytes into a string (this will be the key).
-  key = string(hash[:32])
+  // To do this we first need to make a salt.
+  log.Debug("Creating salt...")
+  salt := make([]byte, 16)
+  _, err := rand.Read(salt)
+  if err != nil {
+    return "", err
+  }
   
+  // Find the number of cores (as the number of threads while hashing)
+  threads := runtime.NumCPU() 
+
+  // Use the argon IDkey function, with double the RFC recommendations.
+  log.Debug("Creating argon2 hash...")
+  argon := argon2.IDKey([]byte(passphrase), salt, (1 * 2), ((64 * 1024) * 2), uint8(threads), 32)
+
+  // Encode for saving...
+  log.Debug("Encoding salt...")
+  b64Salt := base64.RawStdEncoding.EncodeToString(salt)
+  log.Debug("Encoding hash...")
+  b64Hash := base64.RawStdEncoding.EncodeToString(argon)
+
+  // Save to the keys file
+  log.Debug("Parsing hash...")
+  encodedHash := fmt.Sprintf("%s $argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", grave, argon2.Version, ((64 * 1024) * 2), (1 * 2), threads, b64Salt, b64Hash)
+  
+  log.Debug("Opening keys file...")
+  f, err := os.OpenFile(app_path + "/keys", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+  if err != nil {
+	  return "", err
+  }
+  defer f.Close()
+
+  log.Debug("Writing encoded hash...")
+  if _, err := f.WriteString(encodedHash); err != nil {
+	  return "", err
+  }
+
   log.Debug("Done!")
-  return string(key)
+  return string(key), nil
 }
 
 /*
@@ -596,7 +714,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
     case tea.KeyEnter:
-      key = createKey(m.textInput.Value())
+      // This is where we'll check the user's input
+      // (on the enter key press)
+      
+      var err error
+
+      if grave_is_new {
+        key, err = createKey(current_grave, m.textInput.Value())
+      } else {
+        key, err = checkKey(current_grave, m.textInput.Value())
+      }
+
+      if err != nil {
+        log.Fatal("Failed to preform key action.", "is new key", grave_is_new, "err", err)
+      }
+
       return m, tea.Quit
 		case tea.KeyCtrlC, tea.KeyEsc:
       os.Exit(0)
