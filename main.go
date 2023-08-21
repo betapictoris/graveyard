@@ -48,7 +48,6 @@ var (
 
 func main() {
   // TODO: Add an CLI option for this
-  //log.SetLevel(log.DebugLevel)
   log.SetLevel(log.WarnLevel)
   
   // Get information on where to store data
@@ -94,6 +93,20 @@ func main() {
 				Email: "beta@hai.haus",
 			},
 		},
+
+    Flags: []cli.Flag{
+      &cli.StringFlag{
+        Name:  "log",
+        Value: "warn",
+        Usage: "Logging level",
+      },
+    },
+    Before: func(cCtx *cli.Context) error {
+      if cCtx.String("log") != "warn" {
+        log.SetLevel(log.DebugLevel)
+      }
+      return nil
+   },
 
     Commands: []*cli.Command{
       {
