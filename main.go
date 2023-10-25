@@ -73,7 +73,7 @@ func main() {
 
   // Create a placeholder text file
   if !fileExists(app_path + "/placeholder") {
-    value := []byte("Hello, and welcome to your grave!\nYou can store all kinda of photos in here and they'll be secured once you close it!")
+    value := []byte("Hello, and welcome to your grave!\nYou can store all kinds of files in here and they'll be secured once you close it!")
     err := os.WriteFile(app_path + "/placeholder", value, 0600)
 
     if err != err {
