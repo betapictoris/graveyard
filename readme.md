@@ -7,6 +7,13 @@ a simple way to encrypt files. Although, with a few key differences:
  - It's built on top of archives, this means there is no need for elevated permissions.
  - "Graves," are managed by Graveyard, as opposed to being untracked files.
 
+
+> [!NOTE]
+> Graveyard is considered to be feature-complete, feature pull requests
+> may not be merged. 
+
+
+
 ## What was wrong with Tomb?
 
 Now, there wasn't anything inherently wrong with Tomb. Although, I had a few
