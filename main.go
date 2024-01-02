@@ -307,7 +307,12 @@ func checkKey(grave, passphrase string) (string, error) {
   log.Debug("Finding key...")
   // Loop through all keys -- this isn't perfect, but it works.
   for _, i := range strings.Split(string(keys), "\n") {
+    if i == "" {
+      continue
+    }
+
     e := strings.Split(i, " ")
+    log.Debug(e)
 
     g := e[0] // The grave will be the first section of the line
     h := e[1] // and the hash is on the second section
@@ -401,7 +406,7 @@ func createKey(grave, passphrase string) (string, error) {
 
   // Save to the keys file
   log.Debug("Parsing hash...")
-  encodedHash := fmt.Sprintf("%s $argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", grave, argon2.Version, ((64 * 1024) * 2), (1 * 2), threads, b64Salt, b64Hash)
+  encodedHash := fmt.Sprintf("%s $argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s\n", grave, argon2.Version, ((64 * 1024) * 2), (1 * 2), threads, b64Salt, b64Hash)
   
   log.Debug("Opening keys file...")
   f, err := os.OpenFile(app_path + "/keys", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
