@@ -12,9 +12,11 @@ package main
 import (
   "io/ioutil"
   "io"
+  "io/fs"
   "os"
   "fmt"
   "path"
+  "path/filepath"
   "runtime"
   "errors" 
   "strings"
@@ -613,13 +615,6 @@ func encryptFile(file, key string) error {
  * Takes the name of the directory to archive.
  */
 func makeArchive(dir string) error {
-  // Find all the files that need to be added to the archive.
-  log.Debug("Reading files...")
-  entries, err := os.ReadDir(dir)
-  if err != nil {
-    return err
-  }
-  
   // Create a file that ends in `.tar.gz`
   log.Debug("Creating files...", "file", dir + ".tar.gz")
   buf, err := os.Create(dir + ".tar.gz")
@@ -633,12 +628,16 @@ func makeArchive(dir string) error {
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-  for _, e := range entries {
-    filename := dir + "/" + e.Name()
-    log.Debug("Adding file...", "file", filename)
+  // Find all the files that need to be added to the archive.
+  log.Debug("Reading files...")
+  err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+    if path == dir || d.IsDir() {
+      return nil
+    }
+    log.Debug("Adding file...", "file", path)
 
    	// Open the file
-    file, err := os.Open(filename)
+    file, err := os.Open(path)
     if err != nil {
    		return err
 	  }
@@ -656,7 +655,7 @@ func makeArchive(dir string) error {
   		return err
 	  }
 
-	  header.Name = filename
+	  header.Name = path
 
   	// Write file header to the tar archive
 	  err = tw.WriteHeader(header)
@@ -669,7 +668,8 @@ func makeArchive(dir string) error {
 	  if err != nil {
 		  return err
   	}
-	}
+		return nil
+	})
   
   log.Info("The body is in the casket!", "casket", dir + ".tar.gz")
   return nil
