@@ -670,6 +670,10 @@ func makeArchive(dir string) error {
   	}
 		return nil
 	})
+
+  if err != nil {
+	  return err
+	}
   
   log.Info("The body is in the casket!", "casket", dir + ".tar.gz")
   return nil
